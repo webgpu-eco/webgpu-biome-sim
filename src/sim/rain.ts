@@ -6,28 +6,44 @@ import { shaderModule } from '../core/gpu';
 import { WIND_SPEED, type Wind } from './wind';
 import rainWgsl from '../shaders/weather/rain.wgsl?raw';
 
-// Matches the rainRate slider's upper bound in erosion_sim.ts; full slider = maxDrops.
+// Matches the rainRate slider's upper bound in erosion_sim.ts; full slider = maxDrops * density.
 const RAIN_RATE_MAX = 0.005;
 
 export class Rain {
   maxDrops = 20000;
-  params = {
+  // The two looks. update() blends every value between them by params.snow.
+  rain = {
     speed: 25,
     length: 1.2,
     width: 0.04,
     alpha: 0.35,
-    top: HEIGHT_SCALE * 1.3,
+    drift: 1,     // how much of the wind speed it picks up
+    sway: 0,      // side to side wander, world units
+    density: 1,   // count multiplier
   };
-  private time = 0;
+  snow = {
+    speed: 3,
+    length: 0.2,
+    width: 0.2,
+    alpha: 0.9,
+    drift: 0.25,
+    sway: 1,
+    density: 1.2,   // flakes are small dots, so it takes more of them to read as snowfall
+  };
+  params = {
+    snow: 0,                   // 0 rain, 1 snow
+    top: HEIGHT_SCALE * 1.3,   // where drops start, world y
+  };
   private count = 0;
+  private fallen = 0;   // distance fallen so far; accumulated so changing speed does not make drops jump
 
-  private uniforms: GPUBuffer;   // time, speed, length, width, alpha, top, drift + pad
+  private uniforms: GPUBuffer;   // RainParams in rain.wgsl: fallen, speed, length, width, alpha, top, drift, snow, sway + pad
   private pipeline: GPURenderPipeline;
   private bindGroup: GPUBindGroup;
 
   constructor(height: GPUTexture, wind: Wind) {
     this.uniforms = device.createBuffer({
-      size: 32,
+      size: 48,   // 9 f32 = 36 bytes, rounded up to a multiple of 16
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -68,24 +84,40 @@ export class Rain {
 
   addGui(gui: GUI) {
     const folder = gui.addFolder('Rain');
-    folder.add(this.params, 'speed', 5, 60);
-    folder.add(this.params, 'length', 0.2, 4);
-    folder.add(this.params, 'width', 0.01, 0.2);
-    folder.add(this.params, 'alpha', 0, 1);
+    folder.add(this.params, 'snow', 0, 1);
+
+    const rain = folder.addFolder('Rain look');
+    rain.add(this.rain, 'speed', 5, 60);
+    rain.add(this.rain, 'length', 0.2, 4);
+    rain.add(this.rain, 'width', 0.01, 0.2);
+    rain.add(this.rain, 'alpha', 0, 1);
+
+    const snow = folder.addFolder('Snow look');
+    snow.add(this.snow, 'speed', 0.5, 10);
+    snow.add(this.snow, 'length', 0.05, 1);
+    snow.add(this.snow, 'width', 0.05, 0.5);
+    snow.add(this.snow, 'alpha', 0, 1);
+    snow.add(this.snow, 'drift', 0, 1);
+    snow.add(this.snow, 'sway', 0, 3);
+    snow.add(this.snow, 'density', 1, 5);
   }
 
   update(dt: number, rainRate: number) {
-    this.time += dt;
-    this.count = Math.round(Math.min(rainRate / RAIN_RATE_MAX, 1) * this.maxDrops);
-    const p = this.params;
+    const t = this.params.snow;
+    const mix = (k: keyof typeof this.rain) => this.rain[k] + (this.snow[k] - this.rain[k]) * t;
+    this.count = Math.round(Math.min(rainRate / RAIN_RATE_MAX, 1) * this.maxDrops * mix('density'));
+    const speed = mix('speed');
+    this.fallen += dt * speed;
     device.queue.writeBuffer(this.uniforms, 0, new Float32Array([
-      this.time,
-      p.speed,
-      p.length,
-      p.width,
-      p.alpha,
-      p.top,
-      WIND_SPEED,
+      this.fallen,
+      speed,
+      mix('length'),
+      mix('width'),
+      mix('alpha'),
+      this.params.top,
+      WIND_SPEED * mix('drift'),
+      this.params.snow,
+      mix('sway'),
     ]));
   }
 
