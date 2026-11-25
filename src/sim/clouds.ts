@@ -14,8 +14,13 @@ export class Clouds {
   params = {
     show: true,
     cover: 0.4,
-    scale: 0.045,   // noise frequency; smaller = bigger clouds
     alpha: 0.85,
+    followSeason: true,   // cover and alpha come from the season; turn off to set them by hand
+    springCover: 0.4,     // at season 0
+    springAlpha: 0.85,
+    winterCover: 0.53,    // at season 1: more cloud, but thinner, so the terrain still shows
+    winterAlpha: 0.75,
+    scale: 0.045,   // noise frequency; smaller = bigger clouds
     layers: 3.0,
   };
   // Above the top of the rain streaks (see rain.ts).
@@ -72,14 +77,29 @@ export class Clouds {
   addGui(gui: GUI) {
     const folder = gui.addFolder('Clouds');
     folder.add(this.params, 'show');
-    folder.add(this.params, 'cover', 0, 1);
+    // While they follow the season these two sliders only show the value.
+    const driven = [
+      folder.add(this.params, 'cover', 0, 1).listen(),
+      folder.add(this.params, 'alpha', 0, 1).listen(),
+    ];
+    const setFollowing = (on: boolean) => driven.forEach((c) => c.enable(!on));
+    setFollowing(this.params.followSeason);
+    folder.add(this.params, 'followSeason').name('follow season').onChange(setFollowing);
+    folder.add(this.params, 'springCover', 0, 1).name('spring cover');
+    folder.add(this.params, 'springAlpha', 0, 1).name('spring alpha');
+    folder.add(this.params, 'winterCover', 0, 1).name('winter cover');
+    folder.add(this.params, 'winterAlpha', 0, 1).name('winter alpha');
     folder.add(this.params, 'scale', 0.01, 0.1);
-    folder.add(this.params, 'alpha', 0, 1);
     folder.add(this.params, 'layers', 1, 5).step(1);
   }
 
-  update(dt: number, wind: Wind) {
+  // season: 0 spring, 1 winter.
+  update(dt: number, wind: Wind, season: number) {
     const p = this.params;
+    if (p.followSeason) {
+      p.cover = p.springCover + (p.winterCover - p.springCover) * season;
+      p.alpha = p.springAlpha + (p.winterAlpha - p.springAlpha) * season;
+    }
     // Accumulate the drift so changing the wind does not make the layer jump.
     const drift = dt * DRIFT * wind.params.strength;
     this.offset[0] += wind.dir[0] * drift;

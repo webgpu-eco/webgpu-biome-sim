@@ -193,13 +193,13 @@ export class EcosystemTrack implements Track {
     gui.add(camera, 'walking').name('walk (WASD)');
     gui.add(this.settings, 'freezeCulling');
 
-    this.wind.addGui(gui);
+    // Weather together: the season slider is in Sky, and Clouds and Rain show what it drives.
     this.sky.addGui(gui);
-    this.flowers.addGui(gui);
-    const erosionFolder = gui.addFolder('Erosion');
-    this.erosion.addGui(erosionFolder, false);
-    this.rain.addGui(erosionFolder);
     this.clouds.addGui(gui);
+    this.rain.addGui(gui);
+    this.wind.addGui(gui);
+    this.flowers.addGui(gui);
+    this.erosion.addGui(gui.addFolder('Erosion'), false);
   }
 
   frame(encoder: GPUCommandEncoder, dt: number) {
@@ -207,10 +207,12 @@ export class EcosystemTrack implements Track {
     if (camera.walking) this.followGround(dt);
     if (this.terrainDirty) this.generateTerrain(encoder);
     if (!this.useStub) this.erosion.frame(encoder);
-    this.rain.update(dt, this.erosion.sim.rainRate, this.sky.params.season);
+    // Sources first, then what reads them.
     this.wind.update(dt);
     this.sky.update();
-    this.clouds.update(dt, this.wind);
+    const season = this.sky.params.season;
+    this.rain.update(dt, this.erosion.sim.rainRate, season);
+    this.clouds.update(dt, this.wind, season);
     const reseeded = this.stateDirty;
     if (reseeded || this.takeStep(dt)) this.step(encoder);
     this.census.frame(encoder, reseeded);
