@@ -32,6 +32,7 @@ export class Rain {
   };
   params = {
     snow: 0,                   // 0 rain, 1 snow
+    followSeason: true,        // snow comes from the season; turn off to set it by hand
     top: HEIGHT_SCALE * 1.3,   // where drops start, world y
   };
   private count = 0;
@@ -84,7 +85,10 @@ export class Rain {
 
   addGui(gui: GUI) {
     const folder = gui.addFolder('Rain');
-    folder.add(this.params, 'snow', 0, 1);
+    // While it follows the season the slider only shows the value.
+    const snowSlider = folder.add(this.params, 'snow', 0, 1).listen();
+    snowSlider.enable(!this.params.followSeason);
+    folder.add(this.params, 'followSeason').name('follow season').onChange((on: boolean) => snowSlider.enable(!on));
 
     const rain = folder.addFolder('Rain look');
     rain.add(this.rain, 'speed', 5, 60);
@@ -102,7 +106,9 @@ export class Rain {
     snow.add(this.snow, 'density', 1, 5);
   }
 
-  update(dt: number, rainRate: number) {
+  // season: 0 spring, 1 winter. Rain in spring, snow in winter, sleet in between.
+  update(dt: number, rainRate: number, season: number) {
+    if (this.params.followSeason) this.params.snow = season;
     const t = this.params.snow;
     const mix = (k: keyof typeof this.rain) => this.rain[k] + (this.snow[k] - this.rain[k]) * t;
     this.count = Math.round(Math.min(rainRate / RAIN_RATE_MAX, 1) * this.maxDrops * mix('density'));

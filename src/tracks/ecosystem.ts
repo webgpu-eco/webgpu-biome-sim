@@ -14,7 +14,6 @@ import {
   PLANT_INSTANCE_BYTES,
   DRAW_ARGS_BYTES,
   FLOWER_VERTS,
-  SKY_COLOR,
   MSAA_SAMPLES,
 } from '../core/layout';
 import {
@@ -33,6 +32,7 @@ import { ErosionSim } from '../sim/erosion_sim';
 import { Rain } from '../sim/rain';
 import { Clouds } from '../sim/clouds';
 import { Wind } from '../sim/wind';
+import { Sky } from '../sim/sky';
 import { Census } from '../sim/census';
 import terrainStubWgsl from '../shaders/terrain_stub.wgsl?raw';
 import speciesWgsl from '../shaders/species.wgsl?raw';
@@ -94,7 +94,6 @@ export class EcosystemTrack implements Track {
   private stepIndex = 0;
   private stepBudget = 0;
   private targets = new RenderTargets();
-  private skyClear = { r: SKY_COLOR[0] ** (1 / 2.2), g: SKY_COLOR[1] ** (1 / 2.2), b: SKY_COLOR[2] ** (1 / 2.2), a: 1 };
 
   private height = createGridTexture(GRID, TERRAIN_FORMAT, T.TEXTURE_BINDING | T.STORAGE_BINDING | T.COPY_SRC);
   private moisture = createGridTexture(GRID, TERRAIN_FORMAT, T.TEXTURE_BINDING | T.STORAGE_BINDING);
@@ -114,6 +113,7 @@ export class EcosystemTrack implements Track {
   private terrainIndexBuffer = createBuffer(B.INDEX, terrainIndices(GRID));
 
   private wind = new Wind();
+  private sky = new Sky();
   private rain = new Rain(this.height, this.wind);
   private clouds = new Clouds();
   private census = new Census(this.height, this.moisture, this.state, this.simParams);
@@ -160,6 +160,7 @@ export class EcosystemTrack implements Track {
     { buffer: this.drawParams },
     { buffer: this.flowers.buffer },
     { buffer: this.simParams },
+    { buffer: this.sky.uniforms },
   ]);
   private plantsBindGroup = createBindGroup(
     this.plantsPipeline,
@@ -168,6 +169,7 @@ export class EcosystemTrack implements Track {
       { buffer: this.instances },
       { buffer: this.flowers.buffer },
       { buffer: this.wind.uniforms },
+      { buffer: this.sky.uniforms },
     ]
   );
 
@@ -192,6 +194,7 @@ export class EcosystemTrack implements Track {
     gui.add(this.settings, 'freezeCulling');
 
     this.wind.addGui(gui);
+    this.sky.addGui(gui);
     this.flowers.addGui(gui);
     const erosionFolder = gui.addFolder('Erosion');
     this.erosion.addGui(erosionFolder, false);
@@ -204,8 +207,9 @@ export class EcosystemTrack implements Track {
     if (camera.walking) this.followGround(dt);
     if (this.terrainDirty) this.generateTerrain(encoder);
     if (!this.useStub) this.erosion.frame(encoder);
-    this.rain.update(dt, this.erosion.sim.rainRate);
+    this.rain.update(dt, this.erosion.sim.rainRate, this.sky.params.season);
     this.wind.update(dt);
+    this.sky.update();
     this.clouds.update(dt, this.wind);
     const reseeded = this.stateDirty;
     if (reseeded || this.takeStep(dt)) this.step(encoder);
@@ -286,7 +290,7 @@ export class EcosystemTrack implements Track {
         {
           view: this.targets.color,
           resolveTarget: context.getCurrentTexture().createView(),
-          clearValue: this.skyClear,
+          clearValue: this.sky.clearColor(),
           loadOp: 'clear',
           storeOp: 'discard',
         },

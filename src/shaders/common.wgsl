@@ -1,4 +1,4 @@
-// Shared by every shader. GRID, WORLD_SIZE, HEIGHT_SCALE, SKY are
+// Shared by every shader. GRID, WORLD_SIZE, HEIGHT_SCALE are
 // injected from core/layout.ts before this file.
 
 struct Camera {
@@ -22,6 +22,13 @@ struct Wind {
   offset: vec2f,  // how far the air has moved, so gusts travel downwind
   strength: f32,  // 0 calm, 1 normal
   time: f32,
+}
+
+// One sky for the background, fog, ambient light and water reflection, see sim/sky.ts.
+struct Sky {
+  color: vec3f,     // linear
+  fogDensity: f32,
+  fogStart: f32,    // distance from the camera where fog begins, world units
 }
 
 // plant lifecycle (ecosystem controls when plant dies, compact controls look)
@@ -211,18 +218,19 @@ fn gradientSlope(g: vec2f) -> f32 {
 const SUN_COLOR = vec3f(1.0, 0.95, 0.85);
 
 // ambient lighting (ground and sky)
-fn ambientLight(n: vec3f) -> vec3f {
-  return mix(vec3f(0.16, 0.15, 0.12), SKY * 0.5, n.y * 0.5 + 0.5);
+fn ambientLight(n: vec3f, sky: Sky) -> vec3f {
+  return mix(vec3f(0.16, 0.15, 0.12), sky.color * 0.5, n.y * 0.5 + 0.5);
 }
 
-fn applyFog(color: vec3f, world: vec3f, camPos: vec3f) -> vec3f {
-  let fog = 1.0 - exp(-max(distance(world, camPos) - 60.0, 0.0) * 0.002);
-  return mix(color, SKY, fog);
+// Fades toward the sky color with distance, so far terrain melts into the background.
+fn applyFog(color: vec3f, world: vec3f, camPos: vec3f, sky: Sky) -> vec3f {
+  let fog = 1.0 - exp(-max(distance(world, camPos) - sky.fogStart, 0.0) * sky.fogDensity);
+  return mix(color, sky.color, fog);
 }
 
-fn shade(albedo: vec3f, n: vec3f, world: vec3f, camPos: vec3f) -> vec3f {
+fn shade(albedo: vec3f, n: vec3f, world: vec3f, camPos: vec3f, sky: Sky) -> vec3f {
   let diffuse = max(dot(n, SUN_DIR), 0.0) * SUN_COLOR;
-  return applyFog(albedo * (diffuse + ambientLight(n)), world, camPos);
+  return applyFog(albedo * (diffuse + ambientLight(n, sky)), world, camPos, sky);
 }
 
 fn gamma(c: vec3f) -> vec3f {
