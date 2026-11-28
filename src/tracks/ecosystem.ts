@@ -33,6 +33,8 @@ import { Rain } from '../sim/rain';
 import { Clouds } from '../sim/clouds';
 import { Wind } from '../sim/wind';
 import { Sky } from '../sim/sky';
+import { Stages } from '../editor/stages';
+import { addStagesPanel } from '../editor/stages_panel';
 import { Census } from '../sim/census';
 import terrainStubWgsl from '../shaders/terrain_stub.wgsl?raw';
 import speciesWgsl from '../shaders/species.wgsl?raw';
@@ -90,6 +92,7 @@ export class EcosystemTrack implements Track {
   private animData = new ArrayBuffer(16);
   private animParams = createBuffer(B.UNIFORM | B.COPY_DST, 16);
   private terrainDirty = true;
+  private stubDirty = false; // the stub needs to be written once, without reseeding the plants
   private stateDirty = true;
   private stepIndex = 0;
   private stepBudget = 0;
@@ -116,6 +119,14 @@ export class EcosystemTrack implements Track {
   private sky = new Sky();
   private rain = new Rain(this.height, this.wind);
   private clouds = new Clouds();
+  private stages = new Stages({
+    sky: this.sky,
+    clouds: this.clouds,
+    rain: this.rain,
+    erosion: this.erosion.sim,
+    terrain: { isLive: () => !this.useStub, setLive: (on) => this.setTerrainLive(on) },
+    plants: this.settings,
+  });
   private census = new Census(this.height, this.moisture, this.state, this.simParams);
   private panel = new PopulationPanel(MAX_SPECIES);
   private groundReadback = new Readback(4);
@@ -193,26 +204,29 @@ export class EcosystemTrack implements Track {
     gui.add(camera, 'walking').name('walk (WASD)');
     gui.add(this.settings, 'freezeCulling');
 
-    // Weather together: the season slider is in Sky, and Clouds and Rain show what it drives.
     this.sky.addGui(gui);
     this.clouds.addGui(gui);
     this.rain.addGui(gui);
     this.wind.addGui(gui);
     this.flowers.addGui(gui);
     this.erosion.addGui(gui.addFolder('Erosion'), false);
+    // Its own panel on the left: the stages and what connects them. Last, because it
+    // looks up the sliders the others added.
+    addStagesPanel(this.stages, gui);
   }
 
   frame(encoder: GPUCommandEncoder, dt: number) {
     this.targets.update();
     if (camera.walking) this.followGround(dt);
     if (this.terrainDirty) this.generateTerrain(encoder);
+    if (this.stubDirty) this.writeStub(encoder);
     if (!this.useStub) this.erosion.frame(encoder);
     // Sources first, then what reads them.
+    this.stages.update(dt);
     this.wind.update(dt);
     this.sky.update();
-    const season = this.sky.params.season;
-    this.rain.update(dt, this.erosion.sim.rainRate, season);
-    this.clouds.update(dt, this.wind, season);
+    this.rain.update(dt, this.erosion.sim.rainRate);
+    this.clouds.update(dt, this.wind);
     const reseeded = this.stateDirty;
     if (reseeded || this.takeStep(dt)) this.step(encoder);
     this.census.frame(encoder, reseeded);
@@ -237,10 +251,23 @@ export class EcosystemTrack implements Track {
     t[1] += (this.ground + EYE_HEIGHT - t[1]) * Math.min(1, dt * 8);
   }
 
+  // Stages panel: swap the terrain between the erosion sim and the noise stub while running.
+  // Going back to the sim needs nothing else: it kept its state and exports it every frame.
+  private setTerrainLive(live: boolean) {
+    this.useStub = !live;
+    if (live) this.erosion.seed = this.settings.seed;
+    else this.stubDirty = true;
+  }
+
+  private writeStub(encoder: GPUCommandEncoder) {
+    device.queue.writeBuffer(this.stubParams, 0, new Float32Array([this.settings.seed]));
+    dispatchGrid(encoder, this.stubPipeline, this.stubBindGroup, GRID);
+    this.stubDirty = false;
+  }
+
   private generateTerrain(encoder: GPUCommandEncoder) {
     if (this.useStub) {
-      device.queue.writeBuffer(this.stubParams, 0, new Float32Array([this.settings.seed]));
-      dispatchGrid(encoder, this.stubPipeline, this.stubBindGroup, GRID);
+      this.writeStub(encoder);
     } else {
       this.erosion.seed = this.settings.seed;
       this.erosion.dirty = true;

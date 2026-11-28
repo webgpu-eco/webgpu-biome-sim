@@ -9,9 +9,9 @@ type Look = { color: number[]; fogDensity: number; fogStart: number };
 // into, the sky part of the ambient light and the water's reflection all read it.
 export class Sky {
   params = {
-    season: 0, // 0 spring, 1 winter. Stands in for the shared season until there is one.
+    winter: 0, // 0 the spring look, 1 the winter look
   };
-  // The two looks. update() blends every value between them by params.season.
+  // The two looks. update() blends every value between them by params.winter.
   spring: Look = {
     color: [...SKY_COLOR],
     fogDensity: 0.002,
@@ -29,7 +29,7 @@ export class Sky {
 
   addGui(gui: GUI) {
     const folder = gui.addFolder('Sky');
-    folder.add(this.params, 'season', 0, 1);
+    folder.add(this.params, 'winter', 0, 1);
     for (const [name, look] of [['Spring', this.spring], ['Winter', this.winter]] as const) {
       const f = folder.addFolder(name).close();
       f.addColor(look, 'color');
@@ -39,7 +39,7 @@ export class Sky {
   }
 
   update() {
-    const t = this.params.season;
+    const t = this.params.winter;
     const mix = (a: number, b: number) => a + (b - a) * t;
     this.color = this.spring.color.map((c, i) => mix(c, this.winter.color[i]));
     device.queue.writeBuffer(
