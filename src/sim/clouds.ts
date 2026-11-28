@@ -14,8 +14,8 @@ export class Clouds {
   params = {
     show: true,
     cover: 0.4,
-    scale: 0.045,   // noise frequency; smaller = bigger clouds
     alpha: 0.85,
+    scale: 0.045,   // noise frequency; smaller = bigger clouds
     layers: 3.0,
   };
   // Above the top of the rain streaks (see rain.ts).
@@ -73,8 +73,8 @@ export class Clouds {
     const folder = gui.addFolder('Clouds');
     folder.add(this.params, 'show');
     folder.add(this.params, 'cover', 0, 1);
-    folder.add(this.params, 'scale', 0.01, 0.1);
     folder.add(this.params, 'alpha', 0, 1);
+    folder.add(this.params, 'scale', 0.01, 0.1);
     folder.add(this.params, 'layers', 1, 5).step(1);
   }
 

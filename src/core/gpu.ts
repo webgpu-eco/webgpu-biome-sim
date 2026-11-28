@@ -5,7 +5,6 @@ import {
   HEIGHT_SCALE,
   MAX_SPECIES,
   FLOWER_BUDGET,
-  SKY_COLOR,
   WATER_LEVEL,
   EVENT_KINDS,
   MSAA_SAMPLES,
@@ -17,7 +16,6 @@ const GRID = ${GRID}u;
 const WORLD_SIZE = ${WORLD_SIZE}f;
 const HEIGHT_SCALE = ${HEIGHT_SCALE}f;
 const WATER_LEVEL = ${WATER_LEVEL}f;
-const SKY = vec3f(${SKY_COLOR.join(', ')});
 const MAX_SPECIES = ${MAX_SPECIES}u;
 const EVENT_KINDS = ${EVENT_KINDS}u;
 ${Object.entries(FLOWER_BUDGET)

@@ -19,6 +19,7 @@ struct VSOut {
 @group(0) @binding(4) var<uniform> draw: Draw;
 @group(0) @binding(5) var<storage, read> flowers: array<FlowerParams, MAX_SPECIES>;
 @group(0) @binding(6) var<uniform> sim: Sim;
+@group(0) @binding(7) var<uniform> sky: Sky;
 
 // debug flower species
 fn speciesColor(id: u32) -> vec3f {
@@ -55,8 +56,8 @@ fn biomeColor(h: f32, m: f32, slope: f32, world: vec3f) -> vec3f {
 fn waterColor(world: vec3f) -> vec3f {
   let view = normalize(cam.pos - world);
   let glint = pow(max(dot(reflect(-SUN_DIR, vec3f(0.0, 1.0, 0.0)), view), 0.0), 80.0);
-  let water = mix(vec3f(0.08, 0.3, 0.45), SKY * 0.8, 0.35) + glint * 0.6;
-  return shade(water, vec3f(0.0, 1.0, 0.0), world, cam.pos);
+  let water = mix(vec3f(0.08, 0.3, 0.45), sky.color * 0.8, 0.35) + glint * 0.6;
+  return shade(water, vec3f(0.0, 1.0, 0.0), world, cam.pos, sky);
 }
 
 @fragment
@@ -74,7 +75,7 @@ fn fs(in: VSOut) -> @location(0) vec4f {
     if (surface <= WATER_LEVEL) {
       return vec4f(gamma(waterColor(in.world)), 1.0);
     }
-    return vec4f(gamma(shade(biomeColor(surface, m, slope, in.world), n, in.world, cam.pos)), 1.0);
+    return vec4f(gamma(shade(biomeColor(surface, m, slope, in.world), n, in.world, cam.pos, sky)), 1.0);
   }
 
   var color: vec3f;

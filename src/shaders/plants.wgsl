@@ -18,6 +18,7 @@ struct VSOut {
 @group(0) @binding(1) var<storage, read> instances: array<PlantInstance>;
 @group(0) @binding(2) var<storage, read> flowers: array<FlowerParams, MAX_SPECIES>;
 @group(0) @binding(3) var<uniform> wind: Wind;
+@group(0) @binding(4) var<uniform> sky: Sky;
 
 const PI = 3.14159265;
 const TAU = 6.2831853;
@@ -344,10 +345,10 @@ fn shadePetal(in: VSOut, n: vec3f, toCamera: vec3f) -> vec3f {
   // petal overlap areas block some light
   let occlusion = mix(0.5, 1.0, smoothstep(0.0, 0.3, u));
 
-  var color = albedo * (diffuse + ambientLight(n)) * occlusion + transmitted + rim * albedo;
+  var color = albedo * (diffuse + ambientLight(n, sky)) * occlusion + transmitted + rim * albedo;
 
   // petal wilt means less transmission and duller overall
-  color = mix(color, albedo * (diffuse + ambientLight(n)) * occlusion * 0.8, in.wilt);
+  color = mix(color, albedo * (diffuse + ambientLight(n, sky)) * occlusion * 0.8, in.wilt);
 
   return color;
 }
@@ -362,7 +363,7 @@ fn fs(in: VSOut) -> @location(0) vec4f {
   }
 
   if (in.part == PART_PETAL) {
-    return vec4(gamma(applyFog(shadePetal(in, n, toCamera), in.world, cam.pos)), 1.0);
+    return vec4(gamma(applyFog(shadePetal(in, n, toCamera), in.world, cam.pos, sky)), 1.0);
   }
-  return vec4f(gamma(shade(in.color, n, in.world, cam.pos)), 1.0);
+  return vec4f(gamma(shade(in.color, n, in.world, cam.pos, sky)), 1.0);
 }
